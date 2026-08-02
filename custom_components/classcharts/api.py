@@ -78,7 +78,10 @@ class ClassChartsClient:
     async def pupils(self) -> List[Dict[str, Any]]:
         await self.ensure_auth()
         data = await self._request("GET", PUPILS_URL)
-        return data.get("data", [])
+        pupils = data.get("data", [])
+        if not pupils:
+            _LOGGER.debug("ClassCharts pupils response was empty: %s", data)
+        return pupils
 
     async def behaviour(self, student_id: int) -> Dict[str, Any]:
         await self.ensure_auth()
