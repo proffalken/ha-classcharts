@@ -24,8 +24,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     student_name = entry.data[CONF_STUDENT_NAME]
     morning_hour = entry.options.get(CONF_MORNING_REFRESH_HOUR, DEFAULT_MORNING_REFRESH_HOUR)
 
-    rewards = RewardsCoordinator(hass, client, student_id, student_name)
-    timetable = TimetableCoordinator(hass, client, student_id, student_name)
+    rewards = RewardsCoordinator(hass, entry, client, student_id, student_name)
+    timetable = TimetableCoordinator(hass, entry, client, student_id, student_name)
 
     await rewards.async_config_entry_first_refresh()
     await timetable.async_config_entry_first_refresh()
