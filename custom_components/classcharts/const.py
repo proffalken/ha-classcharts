@@ -1,3 +1,5 @@
+from homeassistant.const import Platform
+
 DOMAIN = "classcharts"
 
 CONF_USERNAME = "username"
@@ -7,7 +9,7 @@ CONF_STUDENT_NAME = "student_name"
 CONF_MORNING_REFRESH_HOUR = "morning_refresh_hour"  # local time
 
 DEFAULT_MORNING_REFRESH_HOUR = 5  # 05:00 Europe/London
-PLATFORMS = ["sensor"]
+PLATFORMS = [Platform.SENSOR]
 
 # Update intervals
 REWARDS_REFRESH_MINUTES = 30  # frequent enough to feel fresh, cheap calls

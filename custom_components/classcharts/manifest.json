@@ -1,14 +1,13 @@
 {
   "domain": "classcharts",
   "name": "ClassCharts (Parent)",
-  "version": "1.0.0",
-  "documentation": "https://example.invalid/classcharts-ha",
-  "issue_tracker": "https://example.invalid/classcharts-ha/issues",
-  "integration_type": "hub",
   "codeowners": ["@proffalken"],
-  "iot_class": "cloud_polling",
-  "requirements": [],
   "config_flow": true,
-  "loggers": ["custom_components.classcharts"]
+  "documentation": "https://example.invalid/classcharts-ha",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://example.invalid/classcharts-ha/issues",
+  "loggers": ["custom_components.classcharts"],
+  "requirements": [],
+  "version": "1.1.0"
 }
-
