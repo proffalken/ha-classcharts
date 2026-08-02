@@ -13,9 +13,6 @@ from .coordinator import RewardsCoordinator, TimetableCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    return True
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
     client = ClassChartsClient(session, entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD])

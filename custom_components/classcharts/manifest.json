@@ -9,7 +9,6 @@
   "iot_class": "cloud_polling",
   "requirements": [],
   "config_flow": true,
-  "min_ha_version": "2026.7.0",
   "loggers": ["custom_components.classcharts"]
 }
 
