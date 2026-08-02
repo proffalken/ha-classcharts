@@ -98,11 +98,13 @@ class ClassChartsClient:
         except (ClientError, TimeoutError) as e:
             raise ClassChartsError(str(e)) from e
 
-    async def _request(self, method: str, url: str, data: Any = None) -> Dict[str, Any]:
+    async def _request(
+        self, method: str, url: str, data: Any = None, params: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
         headers = dict(self._auth_header)
         try:
             async with self._session.request(
-                method, url, headers=headers, timeout=REQUEST_TIMEOUT, data=data
+                method, url, headers=headers, timeout=REQUEST_TIMEOUT, data=data, params=params
             ) as resp:
                 body = await resp.json(content_type=None)
                 if resp.status == 401:
@@ -138,11 +140,12 @@ class ClassChartsClient:
             await self.login()
             return await self._request("GET", url)
 
-    async def timetable_today(self, student_id: int) -> Dict[str, Any]:
+    async def timetable(self, student_id: int, date: Optional[str] = None) -> Dict[str, Any]:
         await self.ensure_auth()
         url = TIMETABLE_URL_TMPL.format(student_id=student_id)
+        params = {"date": date} if date else None
         try:
-            return await self._request("GET", url)
+            return await self._request("GET", url, params=params)
         except AuthError:
             await self.login()
-            return await self._request("GET", url)
+            return await self._request("GET", url, params=params)

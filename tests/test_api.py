@@ -12,6 +12,7 @@ from custom_components.classcharts.api import (
     ClassChartsClient,
     ClassChartsError,
     PUPILS_URL,
+    TIMETABLE_URL_TMPL,
 )
 from conftest import FakeResponse, FakeSession
 
@@ -84,6 +85,37 @@ async def test_pupils_posts_body_and_returns_parsed_list():
     assert result == [{"id": 1, "name": "Eve"}]
     assert session.request_calls[-1]["method"] == "POST"
     assert session.request_calls[-1]["url"] == PUPILS_URL
+
+
+async def test_timetable_without_date_omits_date_param():
+    url = TIMETABLE_URL_TMPL.format(student_id=42)
+    session = FakeSession()
+    session.queue_request(FakeResponse(status=200, json_data={"success": 1, "data": [], "meta": {}}))
+    client = ClassChartsClient(session, EMAIL, PASSWORD)
+    client._session_id = "sid-123"
+    client._auth_header = {"Authorization": "Basic sid-123"}
+
+    await client.timetable(42)
+
+    call = session.request_calls[-1]
+    assert call["method"] == "GET"
+    assert call["url"] == url
+    assert call.get("params") is None
+
+
+async def test_timetable_with_date_passes_date_param():
+    url = TIMETABLE_URL_TMPL.format(student_id=42)
+    session = FakeSession()
+    session.queue_request(FakeResponse(status=200, json_data={"success": 1, "data": [], "meta": {}}))
+    client = ClassChartsClient(session, EMAIL, PASSWORD)
+    client._session_id = "sid-123"
+    client._auth_header = {"Authorization": "Basic sid-123"}
+
+    await client.timetable(42, date="2026-06-10")
+
+    call = session.request_calls[-1]
+    assert call["url"] == url
+    assert call["params"] == {"date": "2026-06-10"}
 
 
 async def test_request_timeout_raises_classcharts_error_not_raw_timeout():

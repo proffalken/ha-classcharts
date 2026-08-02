@@ -8,7 +8,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 from .api import AuthError, ClassChartsClient, ClassChartsError
-from .const import REWARDS_REFRESH_MINUTES, TIMETABLE_DAY_CACHE_SECONDS
+from .const import CALENDAR_DAYS_AHEAD, REWARDS_REFRESH_MINUTES, TIMETABLE_DAY_CACHE_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,12 +72,31 @@ class TimetableCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self.student_name = student_name
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        try:
-            raw = await self._client.timetable_today(self.student_id)
-        except AuthError as e:
-            raise ConfigEntryAuthFailed(str(e)) from e
-        except ClassChartsError as e:
-            raise UpdateFailed(str(e)) from e
-        lessons = raw.get("data", []) or []
-        meta = raw.get("meta", {}) or {}
-        return {"lessons": lessons, "meta": meta, "count": len(lessons)}
+        today = dt_util.now().date()
+        days: Dict[str, Dict[str, Any]] = {}
+
+        for offset in range(CALENDAR_DAYS_AHEAD):
+            date = today + timedelta(days=offset)
+            date_str = date.isoformat()
+            try:
+                raw = await self._client.timetable(self.student_id, date=date_str)
+            except AuthError as e:
+                raise ConfigEntryAuthFailed(str(e)) from e
+            except ClassChartsError as e:
+                if offset == 0:
+                    raise UpdateFailed(str(e)) from e
+                _LOGGER.warning("Skipping ClassCharts timetable for %s: %s", date_str, e)
+                continue
+
+            days[date_str] = {
+                "lessons": raw.get("data", []) or [],
+                "meta": raw.get("meta", {}) or {},
+            }
+
+        today_data = days.get(today.isoformat(), {"lessons": [], "meta": {}})
+        return {
+            "days": days,
+            "lessons": today_data["lessons"],
+            "meta": today_data["meta"],
+            "count": len(today_data["lessons"]),
+        }
