@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from http.cookies import SimpleCookie
 from typing import Any
 
 
@@ -43,6 +44,24 @@ class FakeResponse:
         return self._json_data
 
 
+class FakeCookieJar:
+    """Duck-typed stand-in for aiohttp's cookie jar: read-side only.
+
+    Real Set-Cookie parsing isn't modelled -- tests seed cookies directly via
+    `set_cookie` to simulate "the login POST resulted in these being set",
+    which is all ClassChartsClient's cookie-reading code depends on.
+    """
+
+    def __init__(self) -> None:
+        self._cookies: SimpleCookie = SimpleCookie()
+
+    def set_cookie(self, name: str, value: str) -> None:
+        self._cookies[name] = value
+
+    def filter_cookies(self, url: str) -> SimpleCookie:
+        return self._cookies
+
+
 class FakeSession:
     """Duck-typed stand-in for aiohttp.ClientSession, queue-driven per call."""
 
@@ -51,6 +70,10 @@ class FakeSession:
         self.request_calls: list[dict] = []
         self._post_queue: list[FakeResponse] = []
         self._request_queue: list[FakeResponse] = []
+        self.cookie_jar = FakeCookieJar()
+
+    def set_cookie(self, name: str, value: str) -> None:
+        self.cookie_jar.set_cookie(name, value)
 
     def queue_post(self, response: FakeResponse) -> None:
         self._post_queue.append(response)

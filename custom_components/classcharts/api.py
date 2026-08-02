@@ -1,12 +1,21 @@
 from __future__ import annotations
 import asyncio
+import json
 import logging
 from typing import Any, Dict, List, Optional
+from urllib.parse import unquote
 from aiohttp import ClientError, ClientSession, ClientTimeout
 
 _LOGGER = logging.getLogger(__name__)
 
-LOGIN_URL = "https://www.classcharts.com/apiv2parent/login"
+# The JSON API login endpoint (apiv2parent/login) returns a session_id but
+# never issues a session cookie, so every subsequent data call gets silently
+# redirected through session.tes.com's verification gate and comes back
+# "successful" but empty. The real HTML login form does establish a verified
+# session, so that's what we authenticate against instead.
+LOGIN_URL = "https://www.classcharts.com/parent/login"
+PING_URL = "https://www.classcharts.com/apiv2parent/ping"
+SITE_URL = "https://www.classcharts.com/"
 PUPILS_URL = "https://www.classcharts.com/apiv2parent/pupils"
 BEHAVIOUR_URL_TMPL = "https://www.classcharts.com/apiv2parent/behaviour/{student_id}"
 TIMETABLE_URL_TMPL = "https://www.classcharts.com/apiv2parent/timetable/{student_id}"
@@ -34,36 +43,73 @@ class ClassChartsClient:
             await self._do_login()
 
     async def _do_login(self) -> None:
-        payload = f"email={self._email}&password={self._password}&remember=true&recaptcha-token=no-token-available"
+        payload = (
+            f"_method=POST&email={self._email}&logintype=existing"
+            f"&password={self._password}&recaptcha-token=no-token-available"
+        )
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         try:
             async with self._session.post(
                 LOGIN_URL, data=payload, headers=headers, timeout=REQUEST_TIMEOUT
-            ) as resp:
-                data = await resp.json(content_type=None)
-                sid = (data or {}).get("meta", {}).get("session_id")
-                if resp.status != 200 or not sid:
-                    _LOGGER.debug(
-                        "ClassCharts login failed: status=%s body=%s", resp.status, data
-                    )
-                    raise AuthError("Login failed")
-                self._session_id = sid
-                self._auth_header = {"Authorization": f"Basic {sid}"}
-        except (ClientError, TimeoutError, ValueError) as e:
+            ):
+                pass
+        except (ClientError, TimeoutError) as e:
             raise ClassChartsError(str(e)) from e
 
-    async def _request(self, method: str, url: str) -> Dict[str, Any]:
+        token = self._extract_session_token()
+        if not token:
+            _LOGGER.debug("ClassCharts login: no session cookie found after login POST")
+            raise AuthError("Login failed")
+
+        self._session_id = token
+        self._auth_header = {
+            "Authorization": f"Basic {token}",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://www.classcharts.com/mobile/parent",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+        }
+
+        await self._ping()
+
+    def _extract_session_token(self) -> Optional[str]:
+        cookies = self._session.cookie_jar.filter_cookies(SITE_URL)
+
+        raw = cookies.get("parent_session_credentials")
+        if raw is not None:
+            try:
+                decoded = json.loads(unquote(raw.value))
+                token = decoded.get("session_id")
+                if token:
+                    return token
+            except (json.JSONDecodeError, AttributeError, TypeError):
+                pass
+
+        cc = cookies.get("cc-session")
+        return cc.value if cc is not None else None
+
+    async def _ping(self) -> None:
+        """Activate the session -- data endpoints return empty results without this."""
+        try:
+            async with self._session.post(
+                PING_URL, data="{}", headers=self._auth_header, timeout=REQUEST_TIMEOUT
+            ) as resp:
+                if resp.status != 200:
+                    raise AuthError(f"Session activation failed: status={resp.status}")
+        except (ClientError, TimeoutError) as e:
+            raise ClassChartsError(str(e)) from e
+
+    async def _request(self, method: str, url: str, data: Any = None) -> Dict[str, Any]:
         headers = dict(self._auth_header)
         try:
             async with self._session.request(
-                method, url, headers=headers, timeout=REQUEST_TIMEOUT
+                method, url, headers=headers, timeout=REQUEST_TIMEOUT, data=data
             ) as resp:
-                data = await resp.json(content_type=None)
+                body = await resp.json(content_type=None)
                 if resp.status == 401:
                     raise AuthError("Unauthorised")
-                if data is None or "success" not in data:
-                    raise ClassChartsError(f"Unexpected response: {data}")
-                return data
+                if body is None or "success" not in body:
+                    raise ClassChartsError(f"Unexpected response: {body}")
+                return body
         except (ClientError, TimeoutError, ValueError) as e:
             raise ClassChartsError(str(e)) from e
 
@@ -77,8 +123,11 @@ class ClassChartsClient:
 
     async def pupils(self) -> List[Dict[str, Any]]:
         await self.ensure_auth()
-        data = await self._request("GET", PUPILS_URL)
-        return data.get("data", [])
+        data = await self._request("POST", PUPILS_URL, data="{}")
+        pupils = data.get("data", [])
+        if not pupils:
+            _LOGGER.debug("ClassCharts pupils response was empty: %s", data)
+        return pupils
 
     async def behaviour(self, student_id: int) -> Dict[str, Any]:
         await self.ensure_auth()
