@@ -1,0 +1,28 @@
+{
+  "title": "ClassCharts (Parent)",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sign in",
+        "description": "Enter your ClassCharts Parent email and password.",
+        "data": {
+          "username": "Email address",
+          "password": "Password"
+        }
+      },
+      "student": {
+        "title": "Choose student",
+        "description": "Select the student and optional morning refresh hour.",
+        "data": {
+          "student_id": "Student",
+          "morning_refresh_hour": "Timetable refresh hour (local)"
+        }
+      }
+    },
+    "error": {
+      "auth": "Authentication failed — check email & password.",
+      "cannot_connect": "Could not connect to ClassCharts.",
+      "no_pupils": "No pupils found on this account."
+    }
+  }
+}
