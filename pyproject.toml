@@ -1,6 +1,6 @@
 [project]
 name = "ha-classcharts"
-version = "0.0.1"
+version = "1.2.0"
 description = "Unofficial ClassCharts (Parent) integration for Home Assistant"
 requires-python = ">=3.13"
 dependencies = []
