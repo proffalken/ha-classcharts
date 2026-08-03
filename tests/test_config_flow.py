@@ -16,6 +16,7 @@ def _flow_with_reauth_entry(entry_data: dict) -> ClassChartsConfigFlow:
     entry = MagicMock()
     entry.data = entry_data
     entry.entry_id = "test-entry-id"
+    entry.update_listeners = []  # real ConfigEntry objects have none; MagicMock() would be truthy
     flow.hass.config_entries.async_get_known_entry.return_value = entry
     return flow
 
