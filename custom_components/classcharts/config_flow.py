@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections.abc import Mapping
 from typing import Any
 import voluptuous as vol
 
@@ -98,4 +99,35 @@ class ClassChartsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         return self.async_show_form(step_id="student", data_schema=schema)
+
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        reauth_entry = self._get_reauth_entry()
+
+        if user_input is not None:
+            email = user_input[CONF_USERNAME]
+            password = user_input[CONF_PASSWORD]
+            try:
+                pupils = await _fetch_pupils(self.hass, email, password)
+                student_id = reauth_entry.data[CONF_STUDENT_ID]
+                if not any(p.get("id") == student_id for p in pupils):
+                    errors["base"] = "no_pupils"
+                else:
+                    return self.async_update_reload_and_abort(
+                        reauth_entry,
+                        data_updates={CONF_USERNAME: email, CONF_PASSWORD: password},
+                    )
+            except AuthError:
+                errors["base"] = "auth"
+            except ClassChartsError:
+                errors["base"] = "cannot_connect"
+
+        schema = vol.Schema({
+            vol.Required(CONF_USERNAME, default=reauth_entry.data.get(CONF_USERNAME, "")): str,
+            vol.Required(CONF_PASSWORD): str,
+        })
+        return self.async_show_form(step_id="reauth_confirm", data_schema=schema, errors=errors)
 
