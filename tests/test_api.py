@@ -11,6 +11,7 @@ from custom_components.classcharts.api import (
     BEHAVIOUR_URL_TMPL,
     ClassChartsClient,
     ClassChartsError,
+    HOMEWORK_URL_TMPL,
     PUPILS_URL,
     TIMETABLE_URL_TMPL,
 )
@@ -116,6 +117,40 @@ async def test_timetable_with_date_passes_date_param():
     call = session.request_calls[-1]
     assert call["url"] == url
     assert call["params"] == {"date": "2026-06-10"}
+
+
+async def test_homework_passes_display_date_and_range_params():
+    url = HOMEWORK_URL_TMPL.format(student_id=42)
+    session = FakeSession()
+    session.queue_request(FakeResponse(status=200, json_data={"success": 1, "data": []}))
+    client = ClassChartsClient(session, EMAIL, PASSWORD)
+    client._session_id = "sid-123"
+    client._auth_header = {"Authorization": "Basic sid-123"}
+
+    await client.homework(42, "2026-06-01", "2026-06-14")
+
+    call = session.request_calls[-1]
+    assert call["method"] == "GET"
+    assert call["url"] == url
+    assert call["params"] == {"display_date": "due_date", "from": "2026-06-01", "to": "2026-06-14"}
+
+
+async def test_homework_relogs_in_once_on_401_then_succeeds():
+    url = HOMEWORK_URL_TMPL.format(student_id=42)
+    session = FakeSession()
+    session.set_cookie("cc-session", "sid-1")
+    session.queue_post(FakeResponse(status=200))  # form login
+    session.queue_post(FakeResponse(status=200))  # ping
+    session.queue_request(FakeResponse(status=401, json_data={"success": False}))
+    session.queue_post(FakeResponse(status=200))  # form login (retry)
+    session.queue_post(FakeResponse(status=200))  # ping (retry)
+    session.queue_request(FakeResponse(status=200, json_data={"success": 1, "data": [{"id": 1}]}))
+
+    client = ClassChartsClient(session, EMAIL, PASSWORD)
+    result = await client.homework(42, "2026-06-01", "2026-06-14")
+
+    assert result["data"] == [{"id": 1}]
+    assert len(session.request_calls) == 2
 
 
 async def test_request_timeout_raises_classcharts_error_not_raw_timeout():

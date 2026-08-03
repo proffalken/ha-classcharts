@@ -19,6 +19,7 @@ SITE_URL = "https://www.classcharts.com/"
 PUPILS_URL = "https://www.classcharts.com/apiv2parent/pupils"
 BEHAVIOUR_URL_TMPL = "https://www.classcharts.com/apiv2parent/behaviour/{student_id}"
 TIMETABLE_URL_TMPL = "https://www.classcharts.com/apiv2parent/timetable/{student_id}"
+HOMEWORK_URL_TMPL = "https://www.classcharts.com/apiv2parent/homeworks/{student_id}"
 
 REQUEST_TIMEOUT = ClientTimeout(total=30)
 
@@ -144,6 +145,16 @@ class ClassChartsClient:
         await self.ensure_auth()
         url = TIMETABLE_URL_TMPL.format(student_id=student_id)
         params = {"date": date} if date else None
+        try:
+            return await self._request("GET", url, params=params)
+        except AuthError:
+            await self.login()
+            return await self._request("GET", url, params=params)
+
+    async def homework(self, student_id: int, date_from: str, date_to: str) -> Dict[str, Any]:
+        await self.ensure_auth()
+        url = HOMEWORK_URL_TMPL.format(student_id=student_id)
+        params = {"display_date": "due_date", "from": date_from, "to": date_to}
         try:
             return await self._request("GET", url, params=params)
         except AuthError:

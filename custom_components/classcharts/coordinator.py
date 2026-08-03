@@ -8,7 +8,13 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 from .api import AuthError, ClassChartsClient, ClassChartsError
-from .const import CALENDAR_DAYS_AHEAD, REWARDS_REFRESH_MINUTES, TIMETABLE_DAY_CACHE_SECONDS
+from .const import (
+    CALENDAR_DAYS_AHEAD,
+    HOMEWORK_REFRESH_MINUTES,
+    PUPIL_SUMMARY_REFRESH_MINUTES,
+    REWARDS_REFRESH_MINUTES,
+    TIMETABLE_DAY_CACHE_SECONDS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -100,3 +106,68 @@ class TimetableCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             "meta": today_data["meta"],
             "count": len(today_data["lessons"]),
         }
+
+class PupilSummaryCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        client: ClassChartsClient,
+        student_id: int,
+        student_name: str,
+    ):
+        super().__init__(
+            hass,
+            _LOGGER,
+            config_entry=config_entry,
+            name=f"classcharts_summary_{student_id}",
+            update_interval=timedelta(minutes=PUPIL_SUMMARY_REFRESH_MINUTES),
+        )
+        self._client = client
+        self.student_id = student_id
+        self.student_name = student_name
+
+    async def _async_update_data(self) -> Dict[str, Any]:
+        try:
+            pupils = await self._client.pupils()
+        except AuthError as e:
+            raise ConfigEntryAuthFailed(str(e)) from e
+        except ClassChartsError as e:
+            raise UpdateFailed(str(e)) from e
+
+        pupil = next((p for p in pupils if p.get("id") == self.student_id), None)
+        if pupil is None:
+            raise UpdateFailed(f"Student {self.student_id} not found in ClassCharts pupils response")
+        return pupil
+
+class HomeworkCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        client: ClassChartsClient,
+        student_id: int,
+        student_name: str,
+    ):
+        super().__init__(
+            hass,
+            _LOGGER,
+            config_entry=config_entry,
+            name=f"classcharts_homework_{student_id}",
+            update_interval=timedelta(minutes=HOMEWORK_REFRESH_MINUTES),
+        )
+        self._client = client
+        self.student_id = student_id
+        self.student_name = student_name
+
+    async def _async_update_data(self) -> Dict[str, Any]:
+        today = dt_util.now().date()
+        date_to = today + timedelta(days=CALENDAR_DAYS_AHEAD)
+        try:
+            raw = await self._client.homework(self.student_id, today.isoformat(), date_to.isoformat())
+        except AuthError as e:
+            raise ConfigEntryAuthFailed(str(e)) from e
+        except ClassChartsError as e:
+            raise UpdateFailed(str(e)) from e
+
+        return {"items": raw.get("data", []) or []}

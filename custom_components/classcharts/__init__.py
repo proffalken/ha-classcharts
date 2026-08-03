@@ -9,7 +9,12 @@ from .const import (
     CONF_MORNING_REFRESH_HOUR, DEFAULT_MORNING_REFRESH_HOUR
 )
 from .api import ClassChartsClient
-from .coordinator import RewardsCoordinator, TimetableCoordinator
+from .coordinator import (
+    HomeworkCoordinator,
+    PupilSummaryCoordinator,
+    RewardsCoordinator,
+    TimetableCoordinator,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,14 +28,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     rewards = RewardsCoordinator(hass, entry, client, student_id, student_name)
     timetable = TimetableCoordinator(hass, entry, client, student_id, student_name)
+    summary = PupilSummaryCoordinator(hass, entry, client, student_id, student_name)
+    homework = HomeworkCoordinator(hass, entry, client, student_id, student_name)
 
     await rewards.async_config_entry_first_refresh()
     await timetable.async_config_entry_first_refresh()
+    await summary.async_config_entry_first_refresh()
+    await homework.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "client": client,
         "rewards": rewards,
         "timetable": timetable,
+        "summary": summary,
+        "homework": homework,
         "student_id": student_id,
         "student_name": student_name,
     }
@@ -38,6 +49,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     @callback
     def _morning_refresh(now=None):
         hass.async_create_task(timetable.async_request_refresh())
+        hass.async_create_task(summary.async_request_refresh())
+        hass.async_create_task(homework.async_request_refresh())
 
     remove = async_track_time_change(hass, _morning_refresh, hour=morning_hour, minute=0, second=0)
     entry.async_on_unload(remove)

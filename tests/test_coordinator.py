@@ -10,7 +10,12 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.classcharts.api import AuthError, ClassChartsError
 from custom_components.classcharts.const import CALENDAR_DAYS_AHEAD
-from custom_components.classcharts.coordinator import RewardsCoordinator, TimetableCoordinator
+from custom_components.classcharts.coordinator import (
+    HomeworkCoordinator,
+    PupilSummaryCoordinator,
+    RewardsCoordinator,
+    TimetableCoordinator,
+)
 
 
 def _fake_hass_and_entry():
@@ -108,6 +113,88 @@ async def test_timetable_coordinator_raises_config_entry_auth_failed_when_later_
     client = MagicMock()
     client.timetable = AsyncMock(side_effect=[_day_response("Today"), AuthError("bad login")])
     coordinator = TimetableCoordinator(hass, entry, client, 1, "Alex")
+
+    with pytest.raises(ConfigEntryAuthFailed):
+        await coordinator._async_update_data()
+
+
+async def test_pupil_summary_coordinator_returns_matching_pupil():
+    hass, entry = _fake_hass_and_entry()
+    client = MagicMock()
+    client.pupils = AsyncMock(
+        return_value=[
+            {"id": 1, "name": "Other Kid", "homework_todo_count": 9},
+            {"id": 42, "name": "Alex", "homework_todo_count": 3, "detention_pending_count": 1},
+        ]
+    )
+    coordinator = PupilSummaryCoordinator(hass, entry, client, 42, "Alex")
+
+    result = await coordinator._async_update_data()
+
+    assert result["id"] == 42
+    assert result["homework_todo_count"] == 3
+    assert result["detention_pending_count"] == 1
+
+
+async def test_pupil_summary_coordinator_raises_update_failed_when_pupil_missing():
+    hass, entry = _fake_hass_and_entry()
+    client = MagicMock()
+    client.pupils = AsyncMock(return_value=[{"id": 1, "name": "Other Kid"}])
+    coordinator = PupilSummaryCoordinator(hass, entry, client, 42, "Alex")
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_pupil_summary_coordinator_raises_update_failed_on_generic_error():
+    hass, entry = _fake_hass_and_entry()
+    client = MagicMock()
+    client.pupils = AsyncMock(side_effect=ClassChartsError("boom"))
+    coordinator = PupilSummaryCoordinator(hass, entry, client, 42, "Alex")
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_pupil_summary_coordinator_raises_config_entry_auth_failed_on_autherror():
+    hass, entry = _fake_hass_and_entry()
+    client = MagicMock()
+    client.pupils = AsyncMock(side_effect=AuthError("bad login"))
+    coordinator = PupilSummaryCoordinator(hass, entry, client, 42, "Alex")
+
+    with pytest.raises(ConfigEntryAuthFailed):
+        await coordinator._async_update_data()
+
+
+async def test_homework_coordinator_returns_items_from_one_call():
+    hass, entry = _fake_hass_and_entry()
+    client = MagicMock()
+    client.homework = AsyncMock(
+        return_value={"success": 1, "data": [{"id": 1, "title": "Essay"}]}
+    )
+    coordinator = HomeworkCoordinator(hass, entry, client, 42, "Alex")
+
+    result = await coordinator._async_update_data()
+
+    assert result["items"] == [{"id": 1, "title": "Essay"}]
+    client.homework.assert_awaited_once()
+
+
+async def test_homework_coordinator_raises_update_failed_on_generic_error():
+    hass, entry = _fake_hass_and_entry()
+    client = MagicMock()
+    client.homework = AsyncMock(side_effect=ClassChartsError("boom"))
+    coordinator = HomeworkCoordinator(hass, entry, client, 42, "Alex")
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_homework_coordinator_raises_config_entry_auth_failed_on_autherror():
+    hass, entry = _fake_hass_and_entry()
+    client = MagicMock()
+    client.homework = AsyncMock(side_effect=AuthError("bad login"))
+    coordinator = HomeworkCoordinator(hass, entry, client, 42, "Alex")
 
     with pytest.raises(ConfigEntryAuthFailed):
         await coordinator._async_update_data()
