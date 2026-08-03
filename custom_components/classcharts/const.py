@@ -14,6 +14,8 @@ PLATFORMS = [Platform.SENSOR, Platform.CALENDAR]
 # Update intervals
 REWARDS_REFRESH_MINUTES = 30  # frequent enough to feel fresh, cheap calls
 TIMETABLE_DAY_CACHE_SECONDS = 3600  # we also schedule a morning refresh
+PUPIL_SUMMARY_REFRESH_MINUTES = 30  # single cheap call, same cadence as rewards
+HOMEWORK_REFRESH_MINUTES = 30  # single cheap call, same cadence as rewards
 
 CALENDAR_DAYS_AHEAD = 14
 

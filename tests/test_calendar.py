@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from homeassistant.util import dt as dt_util
 
-from custom_components.classcharts.calendar import ClassChartsTimetableCalendar, _lesson_to_event
+from custom_components.classcharts.calendar import (
+    ClassChartsHomeworkCalendar,
+    ClassChartsTimetableCalendar,
+    _homework_to_event,
+    _lesson_to_event,
+)
 
 
 def _lesson(**overrides):
@@ -19,6 +24,22 @@ def _lesson(**overrides):
         "start_time": "2026-06-10T08:45:00+01:00",
         "end_time": "2026-06-10T09:15:00+01:00",
         "key": 1157054133,
+    }
+    base.update(overrides)
+    return base
+
+
+def _homework(**overrides):
+    base = {
+        "id": 25171144,
+        "title": "Knowledge test",
+        "subject": "RE",
+        "teacher": "Mrs S Hunter",
+        "lesson": "07R/Re",
+        "homework_type": "Homework",
+        "description": "Please revise using the knowledge organisers.",
+        "issue_date": "2026-05-22",
+        "due_date": "2026-06-01",
     }
     base.update(overrides)
     return base
@@ -103,3 +124,53 @@ async def test_async_get_events_filters_to_requested_range():
     events = await entity.async_get_events(None, start, end)
 
     assert [e.summary for e in events] == ["Registration"]
+
+
+def test_homework_to_event_maps_real_fields():
+    event = _homework_to_event(_homework())
+    assert event is not None
+    assert event.summary == "Knowledge test"
+    assert event.all_day is True
+    assert event.location is None
+    assert "RE" in event.description
+    assert "Mrs S Hunter" in event.description
+    assert "Homework" in event.description
+    assert "revise" in event.description
+    assert event.uid == "classcharts-homework-25171144"
+    assert event.start == date(2026, 6, 1)
+    assert event.end == date(2026, 6, 2)
+
+
+def test_homework_to_event_falls_back_to_subject_when_title_blank():
+    event = _homework_to_event(_homework(title=""))
+    assert event.summary == "RE"
+
+
+def test_homework_to_event_returns_none_for_missing_due_date():
+    assert _homework_to_event(_homework(due_date="")) is None
+    assert _homework_to_event({}) is None
+
+
+def test_homework_event_property_returns_next_due_item(monkeypatch):
+    fixed_now = datetime(2026, 5, 25, 12, 0, tzinfo=timezone(timedelta(hours=1)))
+    monkeypatch.setattr(dt_util, "now", lambda: fixed_now)
+
+    overdue = _homework(id=1, due_date="2026-05-20")
+    upcoming = _homework(id=2, title="Essay", due_date="2026-06-01")
+    coordinator = _StubCoordinator({"items": [overdue, upcoming]})
+    entity = ClassChartsHomeworkCalendar(coordinator, 1, "Eve")
+
+    assert entity.event.summary == "Essay"
+
+
+async def test_homework_async_get_events_filters_to_range():
+    in_range = _homework(id=1, due_date="2026-06-01")
+    out_of_range = _homework(id=2, title="Later", due_date="2026-06-20")
+    coordinator = _StubCoordinator({"items": [in_range, out_of_range]})
+    entity = ClassChartsHomeworkCalendar(coordinator, 1, "Eve")
+
+    start = datetime(2026, 6, 1, 0, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 6, 2, 0, 0, tzinfo=timezone.utc)
+    events = await entity.async_get_events(None, start, end)
+
+    assert [e.summary for e in events] == ["Knowledge test"]

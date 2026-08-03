@@ -1,6 +1,6 @@
 from __future__ import annotations
-from datetime import datetime
-from typing import Any, Optional
+from datetime import date, datetime, timedelta
+from typing import Optional
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.config_entries import ConfigEntry
@@ -10,16 +10,20 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .coordinator import TimetableCoordinator
+from .coordinator import HomeworkCoordinator, TimetableCoordinator
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
     data = hass.data[DOMAIN][entry.entry_id]
     timetable: TimetableCoordinator = data["timetable"]
+    homework: HomeworkCoordinator = data["homework"]
     student_id = data["student_id"]
     student_name = data["student_name"]
 
-    async_add_entities([ClassChartsTimetableCalendar(timetable, student_id, student_name)])
+    async_add_entities([
+        ClassChartsTimetableCalendar(timetable, student_id, student_name),
+        ClassChartsHomeworkCalendar(homework, student_id, student_name),
+    ])
 
 
 def _lesson_to_event(lesson: dict) -> Optional[CalendarEvent]:
@@ -51,15 +55,42 @@ def _lesson_to_event(lesson: dict) -> Optional[CalendarEvent]:
     )
 
 
-class ClassChartsTimetableCalendar(CalendarEntity):
+def _homework_to_event(item: dict) -> Optional[CalendarEvent]:
+    due_raw = item.get("due_date")
+    if not due_raw:
+        return None
+    try:
+        due = date.fromisoformat(due_raw)
+    except ValueError:
+        return None
+
+    summary = item.get("title") or item.get("subject") or "Homework"
+    subject = item.get("subject") or ""
+    teacher = item.get("teacher") or ""
+    homework_type = item.get("homework_type") or ""
+    meta = " · ".join(part for part in (subject, teacher, homework_type) if part)
+    body = (item.get("description") or "").strip()
+    description = "\n\n".join(part for part in (meta, body) if part) or None
+
+    item_id = item.get("id")
+    uid = f"classcharts-homework-{item_id}" if item_id is not None else None
+
+    return CalendarEvent(
+        start=due,
+        end=due + timedelta(days=1),
+        summary=summary,
+        description=description,
+        uid=uid,
+    )
+
+
+class _ClassChartsCalendarBase(CalendarEntity):
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: TimetableCoordinator, student_id: int, student_name: str) -> None:
+    def __init__(self, coordinator, student_id: int, student_name: str) -> None:
         self.coordinator = coordinator
         self._student_id = student_id
         self._student_name = student_name
-        self._attr_name = f"{student_name} Timetable"
-        self._attr_unique_id = f"classcharts_timetable_calendar_{student_id}"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -71,28 +102,24 @@ class ClassChartsTimetableCalendar(CalendarEntity):
         )
 
     def _all_events(self) -> list[CalendarEvent]:
-        days = (self.coordinator.data or {}).get("days", {})
-        events = []
-        for day in days.values():
-            for lesson in day.get("lessons", []):
-                event = _lesson_to_event(lesson)
-                if event is not None:
-                    events.append(event)
-        events.sort(key=lambda e: e.start)
-        return events
+        raise NotImplementedError
 
     @property
     def event(self) -> Optional[CalendarEvent]:
         now = dt_util.now()
-        for event in self._all_events():
-            if event.end > now:
+        events = sorted(self._all_events(), key=lambda e: e.start_datetime_local)
+        for event in events:
+            if event.end_datetime_local > now:
                 return event
         return None
 
     async def async_get_events(
         self, hass: HomeAssistant, start_date: datetime, end_date: datetime
     ) -> list[CalendarEvent]:
-        return [e for e in self._all_events() if e.start < end_date and e.end > start_date]
+        return [
+            e for e in self._all_events()
+            if e.start_datetime_local < end_date and e.end_datetime_local > start_date
+        ]
 
     @property
     def should_poll(self) -> bool:
@@ -104,3 +131,36 @@ class ClassChartsTimetableCalendar(CalendarEntity):
     @callback
     def _handle(self) -> None:
         self.async_write_ha_state()
+
+
+class ClassChartsTimetableCalendar(_ClassChartsCalendarBase):
+    def __init__(self, coordinator: TimetableCoordinator, student_id: int, student_name: str) -> None:
+        super().__init__(coordinator, student_id, student_name)
+        self._attr_name = f"{student_name} Timetable"
+        self._attr_unique_id = f"classcharts_timetable_calendar_{student_id}"
+
+    def _all_events(self) -> list[CalendarEvent]:
+        days = (self.coordinator.data or {}).get("days", {})
+        events = []
+        for day in days.values():
+            for lesson in day.get("lessons", []):
+                event = _lesson_to_event(lesson)
+                if event is not None:
+                    events.append(event)
+        return events
+
+
+class ClassChartsHomeworkCalendar(_ClassChartsCalendarBase):
+    def __init__(self, coordinator: HomeworkCoordinator, student_id: int, student_name: str) -> None:
+        super().__init__(coordinator, student_id, student_name)
+        self._attr_name = f"{student_name} Homework"
+        self._attr_unique_id = f"classcharts_homework_calendar_{student_id}"
+
+    def _all_events(self) -> list[CalendarEvent]:
+        items = (self.coordinator.data or {}).get("items", [])
+        events = []
+        for item in items:
+            event = _homework_to_event(item)
+            if event is not None:
+                events.append(event)
+        return events
