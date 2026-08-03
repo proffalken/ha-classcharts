@@ -9,5 +9,5 @@
   "issue_tracker": "https://github.com/proffalken/ha-classcharts/issues",
   "loggers": ["custom_components.classcharts"],
   "requirements": [],
-  "version": "1.2.0"
+  "version": "1.2.1"
 }
