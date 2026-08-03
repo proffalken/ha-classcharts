@@ -20,6 +20,17 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # If no git tags exist yet (e.g. the very first run in this repo),
+      # anothrNick/github-tag-action falls back to bumping from 0.0.0 --
+      # which would silently *downgrade* manifest.json. Seed it from the
+      # version already in manifest.json instead, so it's a no-op once
+      # real tags exist and only matters for that bootstrap case.
+      - name: Read current manifest version
+        id: current_version
+        run: |
+          VERSION=$(python3 -c "import json; print(json.load(open('custom_components/classcharts/manifest.json'))['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       # Defaults to a patch bump. Override by putting #major or #minor
       # (or #none to skip a release entirely) in the PR title, which
       # GitHub carries into the merge commit message this scans.
@@ -35,6 +46,7 @@ jobs:
           TAG_PREFIX: v
           DEFAULT_BUMP: patch
           DRY_RUN: true
+          INITIAL_VERSION: ${{ steps.current_version.outputs.version }}
 
       - name: Sync manifest.json and pyproject.toml version
         if: steps.compute_tag.outputs.new_tag != ''
