@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  tag:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      new_tag: ${{ steps.compute_tag.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Defaults to a patch bump. Override by putting #major or #minor
+      # (or #none to skip a release entirely) in the PR title, which
+      # GitHub carries into the merge commit message this scans.
+      # DRY_RUN: compute the next version without tagging yet, so
+      # manifest.json/pyproject.toml can be bumped to match *before*
+      # the tag is created -- otherwise the tagged commit's manifest.json
+      # would still show the old version.
+      - name: Compute next version
+        id: compute_tag
+        uses: anothrNick/github-tag-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_PREFIX: v
+          DEFAULT_BUMP: patch
+          DRY_RUN: true
+
+      - name: Sync manifest.json and pyproject.toml version
+        if: steps.compute_tag.outputs.new_tag != ''
+        run: |
+          VERSION="${{ steps.compute_tag.outputs.new_tag }}"
+          VERSION="${VERSION#v}"
+          python3 - "$VERSION" <<'PYEOF'
+          import json
+          import re
+          import sys
+
+          version = sys.argv[1]
+
+          manifest_path = "custom_components/classcharts/manifest.json"
+          with open(manifest_path) as f:
+              manifest = json.load(f)  # validates the file is still well-formed JSON
+          assert "version" in manifest, f"{manifest_path} has no version field"
+
+          with open(manifest_path) as f:
+              content = f.read()
+          content = re.sub(r'"version": ".*"', f'"version": "{version}"', content, count=1)
+          with open(manifest_path, "w") as f:
+              f.write(content)
+
+          with open("pyproject.toml") as f:
+              content = f.read()
+          content = re.sub(r'(?m)^version = ".*"$', f'version = "{version}"', content, count=1)
+          with open("pyproject.toml", "w") as f:
+              f.write(content)
+          PYEOF
+
+      - name: Commit version bump
+        if: steps.compute_tag.outputs.new_tag != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add custom_components/classcharts/manifest.json pyproject.toml
+          git commit -m "chore: bump version to ${{ steps.compute_tag.outputs.new_tag }}"
+          git push origin HEAD:main
+
+      - name: Create and push tag
+        if: steps.compute_tag.outputs.new_tag != ''
+        run: |
+          git tag ${{ steps.compute_tag.outputs.new_tag }}
+          git push origin ${{ steps.compute_tag.outputs.new_tag }}
+
+  release:
+    needs: tag
+    if: needs.tag.outputs.new_tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.tag.outputs.new_tag }}
+          generate_release_notes: true
