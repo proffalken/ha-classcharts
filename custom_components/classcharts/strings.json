@@ -17,6 +17,14 @@
           "student_id": "Student",
           "morning_refresh_hour": "Timetable refresh hour (local)"
         }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate ClassCharts (Parent)",
+        "description": "Your ClassCharts session has expired or your credentials no longer work. Re-enter your email and password.",
+        "data": {
+          "username": "Email address",
+          "password": "Password"
+        }
       }
     },
     "error": {
