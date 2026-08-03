@@ -3,11 +3,11 @@
   "name": "ClassCharts (Parent)",
   "codeowners": ["@proffalken"],
   "config_flow": true,
-  "documentation": "https://example.invalid/classcharts-ha",
+  "documentation": "https://github.com/proffalken/ha-classcharts",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://example.invalid/classcharts-ha/issues",
+  "issue_tracker": "https://github.com/proffalken/ha-classcharts/issues",
   "loggers": ["custom_components.classcharts"],
   "requirements": [],
-  "version": "1.1.0"
+  "version": "1.2.0"
 }
