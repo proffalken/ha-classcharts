@@ -94,7 +94,7 @@ async def test_pupils_relogs_in_once_on_401_then_succeeds():
     session.queue_post(FakeResponse(status=200))  # form login
     session.queue_post(FakeResponse(status=200))  # ping
     session.queue_request(FakeResponse(status=401, json_data={"success": False}))
-    session.queue_post(FakeResponse(status=200))  # form login (retry)
+    session.queue_post(FakeResponse(status=200, sets_cookie=("cc-session", "sid-2")))  # form login (retry)
     session.queue_post(FakeResponse(status=200))  # ping (retry)
     session.queue_request(
         FakeResponse(status=200, json_data={"success": 1, "data": [{"id": 1, "name": "Eve"}], "meta": []})
@@ -106,6 +106,7 @@ async def test_pupils_relogs_in_once_on_401_then_succeeds():
     assert result == [{"id": 1, "name": "Eve"}]
     assert len(session.post_calls) == 4  # two logins x (form login + ping)
     assert len(session.request_calls) == 2  # two pupils POSTs
+    assert session.request_calls[-1]["headers"]["Authorization"] == "Basic sid-2"
 
 
 async def test_timetable_without_date_omits_date_param():
@@ -162,7 +163,7 @@ async def test_homework_relogs_in_once_on_401_then_succeeds():
     session.queue_post(FakeResponse(status=200))  # form login
     session.queue_post(FakeResponse(status=200))  # ping
     session.queue_request(FakeResponse(status=401, json_data={"success": False}))
-    session.queue_post(FakeResponse(status=200))  # form login (retry)
+    session.queue_post(FakeResponse(status=200, sets_cookie=("cc-session", "sid-2")))  # form login (retry)
     session.queue_post(FakeResponse(status=200))  # ping (retry)
     session.queue_request(FakeResponse(status=200, json_data={"success": 1, "data": [{"id": 1}]}))
 
@@ -171,6 +172,7 @@ async def test_homework_relogs_in_once_on_401_then_succeeds():
 
     assert result["data"] == [{"id": 1}]
     assert len(session.request_calls) == 2
+    assert session.request_calls[-1]["headers"]["Authorization"] == "Basic sid-2"
 
 
 async def test_request_timeout_raises_classcharts_error_not_raw_timeout():
@@ -209,7 +211,7 @@ async def test_behaviour_relogs_in_once_on_401_then_succeeds():
     session.queue_post(FakeResponse(status=200))  # ping
     session.queue_request(FakeResponse(status=401, json_data={"success": False}))
     # second login (explicit retry after 401)
-    session.queue_post(FakeResponse(status=200))  # form login
+    session.queue_post(FakeResponse(status=200, sets_cookie=("cc-session", "sid-2")))  # form login
     session.queue_post(FakeResponse(status=200))  # ping
     session.queue_request(
         FakeResponse(
@@ -224,6 +226,7 @@ async def test_behaviour_relogs_in_once_on_401_then_succeeds():
     assert result["success"] is True
     assert len(session.post_calls) == 4  # two logins x (form login + ping)
     assert len(session.request_calls) == 2  # two behaviour GETs
+    assert session.request_calls[-1]["headers"]["Authorization"] == "Basic sid-2"
 
 
 async def test_concurrent_ensure_auth_only_logs_in_once():
