@@ -21,12 +21,14 @@ class FakeResponse:
         json_exc: Exception | None = None,
         enter_exc: Exception | None = None,
         delay: float = 0,
+        sets_cookie: tuple[str, str] | None = None,
     ) -> None:
         self.status = status
         self._json_data = json_data
         self._json_exc = json_exc
         self._enter_exc = enter_exc
         self._delay = delay
+        self.sets_cookie = sets_cookie
 
     async def __aenter__(self) -> "FakeResponse":
         if self._delay:
@@ -83,7 +85,10 @@ class FakeSession:
 
     def post(self, url: str, **kwargs) -> FakeResponse:
         self.post_calls.append({"url": url, **kwargs})
-        return self._post_queue.pop(0)
+        response = self._post_queue.pop(0)
+        if response.sets_cookie:
+            self.set_cookie(*response.sets_cookie)
+        return response
 
     def request(self, method: str, url: str, **kwargs) -> FakeResponse:
         self.request_calls.append({"method": method, "url": url, **kwargs})
