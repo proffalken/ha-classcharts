@@ -85,7 +85,7 @@ class TimetableCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             date = today + timedelta(days=offset)
             date_str = date.isoformat()
             try:
-                raw = await self._client.timetable(self.student_id, date=date_str)
+                raw = await self._client.timetable(self.student_id, date=date_str, warn_if_empty=False)
             except AuthError as e:
                 raise ConfigEntryAuthFailed(str(e)) from e
             except ClassChartsError as e:
@@ -98,6 +98,15 @@ class TimetableCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 "lessons": raw.get("data", []) or [],
                 "meta": raw.get("meta", {}) or {},
             }
+
+        total_lessons = sum(len(d["lessons"]) for d in days.values())
+        if len(days) == CALENDAR_DAYS_AHEAD and total_lessons == 0:
+            _LOGGER.warning(
+                "ClassCharts timetable for student %s returned zero lessons across all %d fetched days "
+                "-- possible stale/degraded session",
+                self.student_id,
+                len(days),
+            )
 
         today_data = days.get(today.isoformat(), {"lessons": [], "meta": {}})
         return {
