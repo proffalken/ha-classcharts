@@ -100,7 +100,7 @@ class TimetableCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             }
 
         total_lessons = sum(len(d["lessons"]) for d in days.values())
-        if days and total_lessons == 0:
+        if len(days) == CALENDAR_DAYS_AHEAD and total_lessons == 0:
             _LOGGER.warning(
                 "ClassCharts timetable for student %s returned zero lessons across all %d fetched days "
                 "-- possible stale/degraded session",

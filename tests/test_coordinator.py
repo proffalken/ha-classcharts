@@ -136,6 +136,23 @@ async def test_timetable_coordinator_warns_when_entire_window_empty(caplog):
     assert any("zero lessons" in r.message.lower() for r in caplog.records)
 
 
+async def test_timetable_coordinator_does_not_warn_when_window_incomplete(caplog):
+    # Later days fail transiently and get skipped, leaving only one successful
+    # day in `days` -- that day being legitimately empty (e.g. a weekend)
+    # shouldn't be mistaken for the whole window being blank.
+    hass, entry = _fake_hass_and_entry()
+    side_effects = [_empty_day_response()] + [ClassChartsError("transient")] * (CALENDAR_DAYS_AHEAD - 1)
+    client = MagicMock()
+    client.timetable = AsyncMock(side_effect=side_effects)
+    coordinator = TimetableCoordinator(hass, entry, client, 1, "Alex")
+
+    with caplog.at_level(logging.WARNING, logger="custom_components.classcharts.coordinator"):
+        result = await coordinator._async_update_data()
+
+    assert len(result["days"]) == 1
+    assert not any("zero lessons" in r.message.lower() for r in caplog.records)
+
+
 async def test_timetable_coordinator_does_not_warn_when_only_one_day_empty(caplog):
     hass, entry = _fake_hass_and_entry()
     responses = [_day_response(f"Lesson {i}") for i in range(CALENDAR_DAYS_AHEAD)]
