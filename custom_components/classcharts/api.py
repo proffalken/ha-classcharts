@@ -151,7 +151,9 @@ class ClassChartsClient:
             _LOGGER.warning("ClassCharts behaviour response for student %s was empty: %s", student_id, data)
         return data
 
-    async def timetable(self, student_id: int, date: Optional[str] = None) -> Dict[str, Any]:
+    async def timetable(
+        self, student_id: int, date: Optional[str] = None, warn_if_empty: bool = True
+    ) -> Dict[str, Any]:
         await self.ensure_auth()
         url = TIMETABLE_URL_TMPL.format(student_id=student_id)
         params = {"date": date} if date else None
@@ -160,7 +162,10 @@ class ClassChartsClient:
         except AuthError:
             await self.login()
             data = await self._request("GET", url, params=params)
-        if not data.get("data"):
+        if warn_if_empty and not data.get("data"):
+            # A single empty day (weekend, holiday) is routine, not a fault -- callers
+            # that poll a whole window, like TimetableCoordinator, pass warn_if_empty=False
+            # and do their own aggregate check instead of warning on every empty day.
             _LOGGER.warning(
                 "ClassCharts timetable response for student %s on %s was empty: %s", student_id, date, data
             )

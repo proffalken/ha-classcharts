@@ -85,7 +85,7 @@ class TimetableCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             date = today + timedelta(days=offset)
             date_str = date.isoformat()
             try:
-                raw = await self._client.timetable(self.student_id, date=date_str)
+                raw = await self._client.timetable(self.student_id, date=date_str, warn_if_empty=False)
             except AuthError as e:
                 raise ConfigEntryAuthFailed(str(e)) from e
             except ClassChartsError as e:

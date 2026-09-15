@@ -276,6 +276,17 @@ async def test_timetable_logs_warning_on_empty_response(caplog):
     assert any("empty" in r.message.lower() for r in caplog.records)
 
 
+async def test_timetable_warn_if_empty_false_suppresses_warning(caplog):
+    session = FakeSession()
+    session.queue_request(FakeResponse(status=200, json_data={"success": 1, "data": [], "meta": {}}))
+    client = _authed_client(session)
+
+    with caplog.at_level(logging.WARNING, logger="custom_components.classcharts.api"):
+        await client.timetable(42, date="2026-06-10", warn_if_empty=False)
+
+    assert caplog.records == []
+
+
 async def test_timetable_does_not_warn_when_data_present(caplog):
     session = FakeSession()
     session.queue_request(
