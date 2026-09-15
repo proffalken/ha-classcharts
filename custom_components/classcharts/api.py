@@ -133,34 +133,48 @@ class ClassChartsClient:
             data = await self._request("POST", PUPILS_URL, data="{}")
         pupils = data.get("data", [])
         if not pupils:
-            _LOGGER.debug("ClassCharts pupils response was empty: %s", data)
+            # A "success" response with no data is the same silent-session-degradation
+            # failure mode described at the top of this file, just past the login step --
+            # surface it at WARNING so it shows up without enabling debug logging.
+            _LOGGER.warning("ClassCharts pupils response was empty: %s", data)
         return pupils
 
     async def behaviour(self, student_id: int) -> Dict[str, Any]:
         await self.ensure_auth()
         url = BEHAVIOUR_URL_TMPL.format(student_id=student_id)
         try:
-            return await self._request("GET", url)
+            data = await self._request("GET", url)
         except AuthError:
             await self.login()
-            return await self._request("GET", url)
+            data = await self._request("GET", url)
+        if not data.get("data"):
+            _LOGGER.warning("ClassCharts behaviour response for student %s was empty: %s", student_id, data)
+        return data
 
     async def timetable(self, student_id: int, date: Optional[str] = None) -> Dict[str, Any]:
         await self.ensure_auth()
         url = TIMETABLE_URL_TMPL.format(student_id=student_id)
         params = {"date": date} if date else None
         try:
-            return await self._request("GET", url, params=params)
+            data = await self._request("GET", url, params=params)
         except AuthError:
             await self.login()
-            return await self._request("GET", url, params=params)
+            data = await self._request("GET", url, params=params)
+        if not data.get("data"):
+            _LOGGER.warning(
+                "ClassCharts timetable response for student %s on %s was empty: %s", student_id, date, data
+            )
+        return data
 
     async def homework(self, student_id: int, date_from: str, date_to: str) -> Dict[str, Any]:
         await self.ensure_auth()
         url = HOMEWORK_URL_TMPL.format(student_id=student_id)
         params = {"display_date": "due_date", "from": date_from, "to": date_to}
         try:
-            return await self._request("GET", url, params=params)
+            data = await self._request("GET", url, params=params)
         except AuthError:
             await self.login()
-            return await self._request("GET", url, params=params)
+            data = await self._request("GET", url, params=params)
+        if not data.get("data"):
+            _LOGGER.warning("ClassCharts homework response for student %s was empty: %s", student_id, data)
+        return data

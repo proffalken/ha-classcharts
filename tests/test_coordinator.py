@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
@@ -29,6 +30,10 @@ def _dates(n: int) -> list[str]:
 
 def _day_response(lesson_name: str) -> dict:
     return {"success": 1, "data": [{"subject_name": lesson_name}], "meta": {"dates": []}}
+
+
+def _empty_day_response() -> dict:
+    return {"success": 1, "data": [], "meta": {"dates": []}}
 
 
 async def test_rewards_coordinator_raises_update_failed_on_generic_error():
@@ -116,6 +121,33 @@ async def test_timetable_coordinator_raises_config_entry_auth_failed_when_later_
 
     with pytest.raises(ConfigEntryAuthFailed):
         await coordinator._async_update_data()
+
+
+async def test_timetable_coordinator_warns_when_entire_window_empty(caplog):
+    hass, entry = _fake_hass_and_entry()
+    client = MagicMock()
+    client.timetable = AsyncMock(side_effect=[_empty_day_response() for _ in range(CALENDAR_DAYS_AHEAD)])
+    coordinator = TimetableCoordinator(hass, entry, client, 1, "Alex")
+
+    with caplog.at_level(logging.WARNING, logger="custom_components.classcharts.coordinator"):
+        result = await coordinator._async_update_data()
+
+    assert result["count"] == 0
+    assert any("zero lessons" in r.message.lower() for r in caplog.records)
+
+
+async def test_timetable_coordinator_does_not_warn_when_only_one_day_empty(caplog):
+    hass, entry = _fake_hass_and_entry()
+    responses = [_day_response(f"Lesson {i}") for i in range(CALENDAR_DAYS_AHEAD)]
+    responses[1] = _empty_day_response()  # tomorrow legitimately has no lessons
+    client = MagicMock()
+    client.timetable = AsyncMock(side_effect=responses)
+    coordinator = TimetableCoordinator(hass, entry, client, 1, "Alex")
+
+    with caplog.at_level(logging.WARNING, logger="custom_components.classcharts.coordinator"):
+        await coordinator._async_update_data()
+
+    assert caplog.records == []
 
 
 async def test_pupil_summary_coordinator_returns_matching_pupil():

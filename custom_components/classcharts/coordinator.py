@@ -99,6 +99,15 @@ class TimetableCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 "meta": raw.get("meta", {}) or {},
             }
 
+        total_lessons = sum(len(d["lessons"]) for d in days.values())
+        if days and total_lessons == 0:
+            _LOGGER.warning(
+                "ClassCharts timetable for student %s returned zero lessons across all %d fetched days "
+                "-- possible stale/degraded session",
+                self.student_id,
+                len(days),
+            )
+
         today_data = days.get(today.isoformat(), {"lessons": [], "meta": {}})
         return {
             "days": days,

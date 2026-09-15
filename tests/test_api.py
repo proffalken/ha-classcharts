@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from urllib.parse import quote
 
 import pytest
@@ -244,3 +245,67 @@ async def test_concurrent_ensure_auth_only_logs_in_once():
 
     assert len(session.post_calls) == 2  # one form login + one ping, not two of each
     assert client._session_id == "sid-shared"
+
+
+def _authed_client(session: FakeSession) -> ClassChartsClient:
+    client = ClassChartsClient(session, EMAIL, PASSWORD)
+    client._session_id = "sid-123"
+    client._auth_header = {"Authorization": "Basic sid-123"}
+    return client
+
+
+async def test_pupils_logs_warning_on_empty_response(caplog):
+    session = FakeSession()
+    session.queue_request(FakeResponse(status=200, json_data={"success": 1, "data": [], "meta": []}))
+    client = _authed_client(session)
+
+    with caplog.at_level(logging.WARNING, logger="custom_components.classcharts.api"):
+        await client.pupils()
+
+    assert any("empty" in r.message.lower() for r in caplog.records)
+
+
+async def test_timetable_logs_warning_on_empty_response(caplog):
+    session = FakeSession()
+    session.queue_request(FakeResponse(status=200, json_data={"success": 1, "data": [], "meta": {}}))
+    client = _authed_client(session)
+
+    with caplog.at_level(logging.WARNING, logger="custom_components.classcharts.api"):
+        await client.timetable(42, date="2026-06-10")
+
+    assert any("empty" in r.message.lower() for r in caplog.records)
+
+
+async def test_timetable_does_not_warn_when_data_present(caplog):
+    session = FakeSession()
+    session.queue_request(
+        FakeResponse(status=200, json_data={"success": 1, "data": [{"subject_name": "Maths"}], "meta": {}})
+    )
+    client = _authed_client(session)
+
+    with caplog.at_level(logging.WARNING, logger="custom_components.classcharts.api"):
+        await client.timetable(42, date="2026-06-10")
+
+    assert caplog.records == []
+
+
+async def test_homework_logs_warning_on_empty_response(caplog):
+    session = FakeSession()
+    session.queue_request(FakeResponse(status=200, json_data={"success": 1, "data": []}))
+    client = _authed_client(session)
+
+    with caplog.at_level(logging.WARNING, logger="custom_components.classcharts.api"):
+        await client.homework(42, "2026-06-01", "2026-06-14")
+
+    assert any("empty" in r.message.lower() for r in caplog.records)
+
+
+async def test_behaviour_logs_warning_on_empty_response(caplog):
+    session = FakeSession()
+    session.queue_request(FakeResponse(status=200, json_data={"success": True, "data": {}}))
+    client = _authed_client(session)
+
+    with caplog.at_level(logging.WARNING, logger="custom_components.classcharts.api"):
+        await client.behaviour(42)
+
+    assert any("empty" in r.message.lower() for r in caplog.records)
