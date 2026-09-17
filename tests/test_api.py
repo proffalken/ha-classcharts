@@ -110,6 +110,36 @@ async def test_pupils_relogs_in_once_on_401_then_succeeds():
     assert session.request_calls[-1]["headers"]["Authorization"] == "Basic sid-2"
 
 
+async def test_pupils_relogs_in_once_on_expired_body_with_200_status_then_succeeds():
+    """ClassCharts signals an expired session with HTTP 200 and success=0/expired=1
+    in the body, not a 401 -- this must be treated as an auth failure too, or the
+    session degrades silently and never recovers on its own (only a reload of the
+    integration would fix it, since that recreates the client and force-logs-in)."""
+    session = FakeSession()
+    session.set_cookie("cc-session", "sid-1")
+    session.queue_post(FakeResponse(status=200))  # form login
+    session.queue_post(FakeResponse(status=200))  # ping
+    session.queue_request(
+        FakeResponse(
+            status=200,
+            json_data={"success": 0, "expired": 1, "error": "You are not logged in. [1]", "meta": []},
+        )
+    )
+    session.queue_post(FakeResponse(status=200, sets_cookie=("cc-session", "sid-2")))  # form login (retry)
+    session.queue_post(FakeResponse(status=200))  # ping (retry)
+    session.queue_request(
+        FakeResponse(status=200, json_data={"success": 1, "data": [{"id": 1, "name": "Eve"}], "meta": []})
+    )
+
+    client = ClassChartsClient(session, EMAIL, PASSWORD)
+    result = await client.pupils()
+
+    assert result == [{"id": 1, "name": "Eve"}]
+    assert len(session.post_calls) == 4  # two logins x (form login + ping)
+    assert len(session.request_calls) == 2  # two pupils POSTs
+    assert session.request_calls[-1]["headers"]["Authorization"] == "Basic sid-2"
+
+
 async def test_timetable_without_date_omits_date_param():
     url = TIMETABLE_URL_TMPL.format(student_id=42)
     session = FakeSession()

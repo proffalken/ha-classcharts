@@ -112,6 +112,14 @@ class ClassChartsClient:
                     raise AuthError("Unauthorised")
                 if body is None or "success" not in body:
                     raise ClassChartsError(f"Unexpected response: {body}")
+                if body.get("expired") or not body.get("success"):
+                    # ClassCharts signals an expired session with HTTP 200 and
+                    # success=0/expired=1 in the body rather than a 401 status,
+                    # so this has to be treated as an auth failure here too --
+                    # otherwise callers' relogin-and-retry logic never triggers
+                    # and the session stays silently dead until the integration
+                    # is reloaded.
+                    raise AuthError(body.get("error") or "Session expired")
                 return body
         except (ClientError, TimeoutError, ValueError) as e:
             raise ClassChartsError(str(e)) from e
